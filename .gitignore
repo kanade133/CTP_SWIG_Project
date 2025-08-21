@@ -1,0 +1,10 @@
+bin/
+obj/
+generated/
+.vs/
+x64/
+x86/
+[Dd]ebug/
+swigwin-*/
+*.user
+*.filters

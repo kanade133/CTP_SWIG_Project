@@ -4,12 +4,21 @@ namespace Test
 {
     internal class Program
     {
-        static string frontAddress = "tcp://182.254.243.31:40011";
+        static string traderFrontAddress = "tcp://182.254.243.31:40001";
+        static string marketFrontAddress = "tcp://182.254.243.31:40011";
         static string brokerId = "9999";
         static string userId = "xxxxxx";
         static string password = "xxxxxx";
 
         static async Task Main(string[] args)
+        {
+            //await MarketTest();
+            await TradeTest();
+
+            Console.WriteLine("End.");
+        }
+
+        private static async Task MarketTest()
         {
             Console.WriteLine("Reading config.json");
 
@@ -20,11 +29,11 @@ namespace Test
                 configPath = configDevPath;
             }
             var config = JsonSerializer.Deserialize<JsonDocument>(File.ReadAllText(configPath))!;
-            frontAddress = config.RootElement.GetProperty("frontAddress").GetString()!;
+            marketFrontAddress = config.RootElement.GetProperty("frontAddress").GetString()!;
             brokerId = config.RootElement.GetProperty("brokerId").GetString()!;
             userId = config.RootElement.GetProperty("userId").GetString()!;
             password = config.RootElement.GetProperty("password").GetString()!;
-            Console.WriteLine(frontAddress);
+            Console.WriteLine(marketFrontAddress);
             Console.WriteLine(brokerId);
             Console.WriteLine(userId);
             Console.WriteLine(password);
@@ -38,8 +47,13 @@ namespace Test
             Console.WriteLine($"IsLogin: {mdSpi.IsLogin}");
             mdSpi.SubscribeMarketData("IF2509");
             await Task.Delay(Timeout.Infinite);
-
-            Console.WriteLine("End.");
+        }
+        private static async Task TradeTest()
+        {
+            Console.WriteLine(CThostFtdcTraderApi.GetApiVersion());
+            var tradeSpi = new MyTradeSpi();
+            tradeSpi.Init();
+            await Task.Delay(Timeout.Infinite);
         }
 
         class MyMdSpi : CThostFtdcMdSpi
@@ -56,7 +70,7 @@ namespace Test
                 System.IO.Directory.CreateDirectory("spi/MD_");
                 _mdApi = CThostFtdcMdApi.CreateFtdcMdApi("spi/MD_");
                 _mdApi.RegisterSpi(this);
-                _mdApi.RegisterFront(frontAddress);
+                _mdApi.RegisterFront(marketFrontAddress);
                 var task = Request();
                 _mdApi.Init();
                 Console.WriteLine("Initing...");
@@ -173,6 +187,26 @@ namespace Test
             public override void OnRtnForQuoteRsp(CThostFtdcForQuoteRspField pForQuoteRsp)
             {
                 Console.WriteLine($"Quote response received for instrument: {pForQuoteRsp.InstrumentID}");
+            }
+        }
+        class MyTradeSpi : CThostFtdcTraderSpi
+        {
+            private CThostFtdcTraderApi? _tradeApi;
+
+            public void Init()
+            {
+                System.IO.Directory.CreateDirectory("spi/Trade_");
+                _tradeApi = CThostFtdcTraderApi.CreateFtdcTraderApi("spi/Trade_");
+                _tradeApi.RegisterSpi(this);
+                _tradeApi.RegisterFront(traderFrontAddress);
+                _tradeApi.Init();
+                Console.WriteLine("Initing...");
+            }
+
+            public override void OnFrontConnected()
+            {
+                base.OnFrontConnected();
+                Console.WriteLine("Trade front connected.");
             }
         }
     }

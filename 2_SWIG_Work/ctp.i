@@ -1,4 +1,4 @@
-%module(directors = "1") CTP_Wrapper
+%module(directors="1") CTP_Wrapper
 
 %include <arrays_csharp.i>;//这是一个Swig定义好的TypeMap
 CSHARP_ARRAYS(char *, string)

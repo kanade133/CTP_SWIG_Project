@@ -1,5 +1,6 @@
 {
-	"frontAddress": "tcp://182.254.243.31:40011",
+	"traderFrontAddress": "tcp://182.254.243.31:40001",
+	"marketFrontAddress": "tcp://182.254.243.31:40011",
 	"brokerId": "9999",
 	"userId": "xxxxxx",
 	"password": "xxxxxx"

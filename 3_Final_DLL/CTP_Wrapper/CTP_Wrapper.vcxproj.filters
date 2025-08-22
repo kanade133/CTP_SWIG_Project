@@ -15,12 +15,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\2_SWIG_Work\ctp_wrap.cxx">
+    <ClCompile Include="..\..\2_SWIG_Work\ctp_wrap.cxx">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\2_SWIG_Work\ctp_wrap.h">
+    <ClInclude Include="..\..\2_SWIG_Work\ctp_wrap.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

@@ -32,7 +32,11 @@ namespace Test
             Console.WriteLine(CThostFtdcMdApi.GetApiVersion());
 
             var mdSpi = new MyMdSpi();
-            mdSpi.Init();
+            await mdSpi.Init();
+            Console.WriteLine($"IsConnected: {mdSpi.IsConnected}");
+            await mdSpi.Login();
+            Console.WriteLine($"IsLogin: {mdSpi.IsLogin}");
+            mdSpi.SubscribeMarketData("IF2509");
             await Task.Delay(Timeout.Infinite);
 
             Console.WriteLine("End.");
@@ -40,30 +44,88 @@ namespace Test
 
         class MyMdSpi : CThostFtdcMdSpi
         {
-            CThostFtdcMdApi? mdApi;
-            int requestId = 0;
+            public bool IsConnected { get; private set; } = false;
+            public bool IsLogin { get; private set; } = false;
 
-            public void Init()
+            private CThostFtdcMdApi? _mdApi;
+            private int _requestId = 0;
+            private TaskCompletionSource? _tcs;
+
+            public Task Init()
             {
                 System.IO.Directory.CreateDirectory("spi/MD_");
-                mdApi = CThostFtdcMdApi.CreateFtdcMdApi("spi/MD_");
-                mdApi.RegisterSpi(this);
-                mdApi.RegisterFront(frontAddress);
-                mdApi.Init();
+                _mdApi = CThostFtdcMdApi.CreateFtdcMdApi("spi/MD_");
+                _mdApi.RegisterSpi(this);
+                _mdApi.RegisterFront(frontAddress);
+                var task = Request();
+                _mdApi.Init();
                 Console.WriteLine("Initing...");
+                return task;
             }
-
-            public override void OnFrontConnected()
+            public Task Login()
             {
-                Console.WriteLine("Front connected.");
-
-                int? requestCode = mdApi?.ReqUserLogin(new CThostFtdcReqUserLoginField
+                var task = Request();
+                int? requestCode = _mdApi?.ReqUserLogin(new CThostFtdcReqUserLoginField
                 {
                     BrokerID = brokerId,
                     UserID = userId,
                     Password = password,
-                }, ++requestId);
+                }, ++_requestId);
                 Console.WriteLine($"Request User Login: {requestCode}");
+                if (requestCode == 0)
+                {
+                    return task;
+                }
+                else
+                {
+                    Response();
+                    return Task.CompletedTask;
+                }
+            }
+            public bool SubscribeMarketData(string instrumentId)
+            {
+                int? requestCode = _mdApi?.SubscribeMarketData([instrumentId], 1);
+                Console.WriteLine($"Request Subscribe Market Data: instrumentId: {instrumentId}, requestCode: {requestCode}");
+                return requestCode == 0;
+            }
+            private Task Request()
+            {
+                if (_tcs != null && !_tcs.Task.IsCompleted)
+                {
+                    return Task.FromException(new InvalidOperationException("Request already in progress."));
+                }
+                else
+                {
+                    _tcs = new TaskCompletionSource();
+                    return _tcs.Task;
+                }
+            }
+            private bool Response()
+            {
+                if (_tcs == null || _tcs.Task.IsCompleted)
+                {
+                    Console.WriteLine("No request in progress.");
+                    return false;
+                }
+                else
+                {
+                    var tcs = _tcs;
+                    _tcs = null;
+                    tcs.SetResult();
+                    return true;
+                }
+            }
+
+            public override void OnFrontConnected()
+            {
+                IsConnected = true;
+                Console.WriteLine("Front connected.");
+                Response();
+            }
+            public override void OnFrontDisconnected(int nReason)
+            {
+                IsConnected = false;
+                Console.WriteLine($"Front disconnected. Reason: {nReason}");
             }
             public override void OnRspError(CThostFtdcRspInfoField pRspInfo, int nRequestID, bool bIsLast)
             {
@@ -73,13 +135,16 @@ namespace Test
             {
                 Console.WriteLine($"Heartbeat warning. Time lapse: {nTimeLapse}");
             }
-            public override void OnFrontDisconnected(int nReason)
-            {
-                Console.WriteLine($"Front disconnected. Reason: {nReason}");
-            }
             public override void OnRspUserLogin(CThostFtdcRspUserLoginField pRspUserLogin, CThostFtdcRspInfoField pRspInfo, int nRequestID, bool bIsLast)
             {
+                IsLogin = pRspInfo.ErrorID == 0;
                 Console.WriteLine($"User login response received. ErrorID: {pRspInfo.ErrorID}, ErrorMsg: {pRspInfo.ErrorMsg}");
+                Response();
+            }
+            public override void OnRspUserLogout(CThostFtdcUserLogoutField pUserLogout, CThostFtdcRspInfoField pRspInfo, int nRequestID, bool bIsLast)
+            {
+                IsLogin = pRspInfo.ErrorID == 0;
+                Console.WriteLine($"User logout response received. ErrorID: {pRspInfo.ErrorID}, ErrorMsg: {pRspInfo.ErrorMsg}");
             }
             public override void OnRtnDepthMarketData(CThostFtdcDepthMarketDataField pDepthMarketData)
             {
@@ -88,6 +153,26 @@ namespace Test
             public override void OnRspSubMarketData(CThostFtdcSpecificInstrumentField pSpecificInstrument, CThostFtdcRspInfoField pRspInfo, int nRequestID, bool bIsLast)
             {
                 Console.WriteLine($"Subscription response for market data: {pSpecificInstrument.InstrumentID}");
+            }
+            public override void OnRspUnSubMarketData(CThostFtdcSpecificInstrumentField pSpecificInstrument, CThostFtdcRspInfoField pRspInfo, int nRequestID, bool bIsLast)
+            {
+                Console.WriteLine($"Unsubscription response for market data: {pSpecificInstrument.InstrumentID}");
+            }
+            public override void OnRspQryMulticastInstrument(CThostFtdcMulticastInstrumentField pMulticastInstrument, CThostFtdcRspInfoField pRspInfo, int nRequestID, bool bIsLast)
+            {
+                Console.WriteLine($"Multicast instrument query response: {pMulticastInstrument.InstrumentID}");
+            }
+            public override void OnRspSubForQuoteRsp(CThostFtdcSpecificInstrumentField pSpecificInstrument, CThostFtdcRspInfoField pRspInfo, int nRequestID, bool bIsLast)
+            {
+                Console.WriteLine($"Subscription response for quote: {pSpecificInstrument.InstrumentID}");
+            }
+            public override void OnRspUnSubForQuoteRsp(CThostFtdcSpecificInstrumentField pSpecificInstrument, CThostFtdcRspInfoField pRspInfo, int nRequestID, bool bIsLast)
+            {
+                Console.WriteLine($"Unsubscription response for quote: {pSpecificInstrument.InstrumentID}");
+            }
+            public override void OnRtnForQuoteRsp(CThostFtdcForQuoteRspField pForQuoteRsp)
+            {
+                Console.WriteLine($"Quote response received for instrument: {pForQuoteRsp.InstrumentID}");
             }
         }
     }
